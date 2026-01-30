@@ -1,0 +1,279 @@
+import tkinter as tk
+from page.main_container.video import MainVideoContainer
+from page.video_container.video import VideoContainer
+from page.grafik.main import GrafikContainer
+
+class VideoPlayerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Python Proje Arayüzü")
+        self.root.state('zoomed')  # Tam ekran başlat
+        
+        # Renk paleti
+        self.colors = {
+            'bg_dark': '#1e1e1e',
+            'bg_medium': '#2d2d30',
+            'bg_light': '#3e3e42',
+            'accent': '#667eea',
+            'accent_hover': '#764ba2',
+            'text': '#e0e0e0'
+        }
+        
+        # Tüm panel container'larını sakla (gizle/göster için)
+        self.panel_containers = {}
+        self.current_panel_name = None
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Ana UI yapısını oluştur"""
+        # Ana container
+        self.root.configure(bg=self.colors['bg_dark'])
+        
+        # Üst Menü Bar
+        self.create_top_menu()
+        
+        # Alt container (Sol panel + Sağ panel)
+        self.main_container = tk.Frame(self.root, bg=self.colors['bg_dark'])
+        self.main_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Sol Panel (%7 genişlik)
+        self.create_left_panel()
+        
+        # Sağ Panel (Video alanı)
+        self.create_right_panel()
+        
+    def create_top_menu(self):
+        """Üst menü bar oluştur"""
+        menu_frame = tk.Frame(self.root, bg=self.colors['accent'], height=60)
+        menu_frame.pack(fill=tk.X, side=tk.TOP)
+        menu_frame.pack_propagate(False)
+        
+        # Logo ve başlık
+        title_label = tk.Label(
+            menu_frame, 
+            text="🐍 Python Proje", 
+            font=('Segoe UI', 16, 'bold'),
+            bg=self.colors['accent'],
+            fg='white',
+            padx=20
+        )
+        title_label.pack(side=tk.LEFT, pady=15)
+        
+        # Menü butonları
+        menu_items = ['Dosya', 'Düzenle', 'Görünüm', 'Ayarlar']
+        for item in menu_items:
+            btn = tk.Button(
+                menu_frame,
+                text=item,
+                font=('Segoe UI', 10),
+                bg=self.colors['accent'],
+                fg='white',
+                relief=tk.FLAT,
+                padx=15,
+                pady=5,
+                cursor='hand2',
+                command=lambda i=item: self.select_top_menu(i)
+            )
+            btn.pack(side=tk.LEFT, padx=5)
+            self.add_hover_effect(btn, self.colors['accent'], self.colors['accent_hover'])
+            
+    def create_left_panel(self):
+        """Sol navigasyon panelini oluştur"""
+        # Sol panel frame - %7 genişlik için
+        self.left_panel = tk.Frame(
+            self.main_container, 
+            bg=self.colors['bg_medium'],
+            width=80
+        )
+        self.left_panel.pack(side=tk.LEFT, fill=tk.Y)
+        self.left_panel.pack_propagate(False)
+        
+        # Panel ikonları ve isimleri
+        panel_items = [
+            ('🏠', 'Ana Sayfa'),
+            ('🎬', 'Video'),
+            ('⚙️', 'Ayarlar'),
+            ('📁', 'Dosyalar'),
+            ('📊', 'Grafik'),
+            ('🔔', 'Bildirim')
+        ]
+        
+        self.panel_buttons = []
+        for icon, name in panel_items:
+            btn_frame = tk.Frame(self.left_panel, bg=self.colors['bg_medium'])
+            btn_frame.pack(pady=10, padx=10)
+            
+            btn = tk.Button(
+                btn_frame,
+                text=icon,
+                font=('Segoe UI', 20),
+                bg=self.colors['bg_light'],
+                fg=self.colors['text'],
+                relief=tk.FLAT,
+                width=3,
+                height=2,
+                cursor='hand2',
+                command=lambda n=name: self.select_panel(n)
+            )
+            btn.pack()
+            self.panel_buttons.append((btn, name))
+            
+            # Hover efekti
+            self.add_hover_effect(btn, self.colors['bg_light'], self.colors['accent'])
+            
+            # Tooltip
+            self.create_tooltip(btn, name)
+        
+        # İlk butonu aktif yap
+        self.panel_buttons[0][0].configure(bg=self.colors['accent'])
+        
+    def create_right_panel(self):
+        """Sağ video panelini oluştur"""
+        self.right_panel = tk.Frame(self.main_container, bg=self.colors['bg_dark'])
+        self.right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # Tüm paneller için container'ları oluştur (başlangıçta gizli)
+        self.initialize_all_panels()
+        
+        # İlk olarak Ana Sayfa container'ını göster
+        self.select_panel('Ana Sayfa')
+        
+    def add_hover_effect(self, widget, normal_color, hover_color):
+        """Butonlara hover efekti ekle"""
+        widget.bind('<Enter>', lambda e: widget.configure(bg=hover_color))
+        widget.bind('<Leave>', lambda e: widget.configure(bg=normal_color))
+        
+    def create_tooltip(self, widget, text):
+        """Widget için tooltip oluştur"""
+        def show_tooltip(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            
+            label = tk.Label(
+                tooltip,
+                text=text,
+                font=('Segoe UI', 9),
+                bg=self.colors['bg_light'],
+                fg='white',
+                padx=8,
+                pady=4,
+                relief=tk.SOLID,
+                borderwidth=1
+            )
+            label.pack()
+            
+            widget.tooltip = tooltip
+            
+        def hide_tooltip(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+                
+        widget.bind('<Enter>', show_tooltip)
+        widget.bind('<Leave>', hide_tooltip)
+        
+    def initialize_all_panels(self):
+        """Tüm paneller için container'ları oluştur (başlangıçta gizli)"""
+        # Ana Sayfa
+        main_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+        main_container = MainVideoContainer(main_frame, self.colors)
+        self.panel_containers['Ana Sayfa'] = {
+            'frame': main_frame,
+            'container': main_container
+        }
+        main_frame.pack_forget()  # Başlangıçta gizli
+        
+        # Video
+        video_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+        video_container = VideoContainer(video_frame, self.colors)
+        self.panel_containers['Video'] = {
+            'frame': video_frame,
+            'container': video_container
+        }
+        video_frame.pack_forget()  # Başlangıçta gizli
+        
+        # Grafik paneli
+        grafik_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+        grafik_container = GrafikContainer(grafik_frame, self.colors)
+        self.panel_containers['Grafik'] = {
+            'frame': grafik_frame,
+            'container': grafik_container
+        }
+        grafik_frame.pack_forget()  # Başlangıçta gizli
+        
+        # Diğer paneller için placeholder container'lar
+        other_panels = ['Ayarlar', 'Dosyalar', 'Bildirim']
+        for panel_name in other_panels:
+            panel_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+            placeholder = tk.Label(
+                panel_frame,
+                text=f"{panel_name} Paneli\n\nBu panel yakında eklenecek",
+                font=('Segoe UI', 18),
+                bg=self.colors['bg_dark'],
+                fg=self.colors['text']
+            )
+            placeholder.pack(expand=True)
+            self.panel_containers[panel_name] = {
+                'frame': panel_frame,
+                'container': None
+            }
+            panel_frame.pack_forget()  # Başlangıçta gizli
+    
+    def select_panel(self, panel_name):
+        """Panel seçimi yap - gizle/göster sistemi"""
+        # Tüm butonları normale çevir
+        for btn, name in self.panel_buttons:
+            btn.configure(bg=self.colors['bg_light'])
+        
+        # Seçili butonu vurgula
+        for btn, name in self.panel_buttons:
+            if name == panel_name:
+                btn.configure(bg=self.colors['accent'])
+                break
+        
+        # Mevcut paneli gizle
+        if self.current_panel_name and self.current_panel_name in self.panel_containers:
+            panel_data = self.panel_containers[self.current_panel_name]
+            panel_data['frame'].pack_forget()
+        
+        # Yeni paneli göster
+        if panel_name in self.panel_containers:
+            panel_data = self.panel_containers[panel_name]
+            panel_data['frame'].pack(fill=tk.BOTH, expand=True)
+        
+        self.current_panel_name = panel_name
+    
+    def select_top_menu(self, menu_name):
+        """Üst menüden panel seçimi"""
+        # Menü isimlerini panel isimlerine map et
+        menu_to_panel = {
+            'Dosya': 'Dosyalar',
+            'Düzenle': 'Ayarlar',
+            'Görünüm': 'Grafik',
+            'Ayarlar': 'Ayarlar'
+        }
+        
+        panel_name = menu_to_panel.get(menu_name)
+        if panel_name:
+            self.select_panel(panel_name)
+        
+    def on_closing(self):
+        """Uygulama kapatılırken"""
+        # Tüm container'ları temizle
+        for panel_name, panel_data in self.panel_containers.items():
+            if panel_data['container'] and hasattr(panel_data['container'], 'cleanup'):
+                panel_data['container'].cleanup()
+        self.root.destroy()
+
+
+def main():
+    root = tk.Tk()
+    app = VideoPlayerApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
