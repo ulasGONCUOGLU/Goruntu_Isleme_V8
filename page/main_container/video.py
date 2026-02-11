@@ -151,7 +151,7 @@ class MainVideoContainer:
         # YOLO model
         self.model = None
         self.tracker = None
-        self.enable_detection = False
+        # self.enable_detection = False
         
         # Alan yönetimi
         self.area_list = []  # [{'name': str, 'points': [(x1,y1), ...], 'id': int}]
@@ -291,9 +291,12 @@ class MainVideoContainer:
             ('⏸️ Duraklat', self.pause_video),
             ('⏹️ Durdur', self.stop_video),
             ('🔄 Sıfırla', self.reset_video),
-            ('🎯 Tespit Aç/Kapa', self.toggle_detection)
+            ('🎥 Video Kaydı Aç/Kapa', self.toggle_video_recording),
         ]
-        
+
+        # Video kayıt butonuna özel referans tut
+        self.video_record_button = None
+
         for text, command in buttons:
             btn = tk.Button(
                 btn_container,
@@ -308,7 +311,16 @@ class MainVideoContainer:
                 command=command
             )
             btn.pack(side=tk.LEFT, padx=5)
-            self.add_hover_effect(btn, self.colors['accent'], self.colors['accent_hover'])
+
+            if command == self.toggle_video_recording:
+                # Bu buton için durumuna göre kırmızı/yeşil renk
+                self.video_record_button = btn
+                self.update_video_record_button_color()
+
+                btn.bind('<Enter>', self._on_video_record_button_enter)
+                btn.bind('<Leave>', self._on_video_record_button_leave)
+            else:
+                self.add_hover_effect(btn, self.colors['accent'], self.colors['accent_hover'])
         
         # Durum çubuğu
         self.status_bar = tk.Label(
@@ -348,6 +360,19 @@ class MainVideoContainer:
                 self.video_frame.delete(self.placeholder_text)
                 self.show_notification(f'Video yüklendi: {os.path.basename(file_path)}')
                 self.display_first_frame()
+
+                if YOLO_AVAILABLE and self.model is None:
+                    model_path = 'runs/train/cctv_car_bike_detection/weights/best.pt'
+                    if os.path.exists(model_path):
+                        try:
+                            self.model = YOLO(model_path)
+                            self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
+                            self.show_notification("Model yüklendi")
+                        except Exception as e:
+                            messagebox.showerror("Hata", f"Model yüklenirken hata: {str(e)}")
+                    else:
+                        messagebox.showerror("Hata", f"Model dosyası bulunamadı: {model_path}")
+
             else:
                 messagebox.showerror("Hata", "Video dosyası açılamadı!")
                 
@@ -365,10 +390,9 @@ class MainVideoContainer:
         """Video oynatmayı başlat"""
         if self.video_capture and self.video_capture.isOpened() and not self.is_playing:
             self.is_playing = True
-            self.should_save_on_stop = True  # Oynatma başladığında kayıt yapılacak
             
-            # Video kaydını başlat
-            if self.frame_width > 0 and self.frame_height > 0:
+            # Video kaydı kullanıcı tercihi açıksa başlat
+            if self.should_save_on_stop and self.frame_width > 0 and self.frame_height > 0:
                 fps = self.video_capture.get(cv2.CAP_PROP_FPS) or 30
                 self.video_recorder.start_recording(
                     self.frame_width,
@@ -388,7 +412,7 @@ class MainVideoContainer:
                 self.original_frame = frame.copy()
                 
                 # Tespit aktifse işle
-                if self.enable_detection and self.model:
+                if self.model:
                     frame = self.process_detection(frame)
                 else:
                     # Tespit kapalıysa sadece alanları çiz
@@ -407,10 +431,12 @@ class MainVideoContainer:
                 self.is_playing = False
                 self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 
-                # Video bittiğinde kayıt yap (ana thread'de)
+                # Video bittiğinde kayıt/sayım kaydı yap (ana thread'de)
+                root = self.parent_frame.winfo_toplevel()
                 if self.should_save_on_stop:
-                    root = self.parent_frame.winfo_toplevel()
                     root.after(0, self._save_recording)
+                else:
+                    root.after(0, self._save_counts_only)
                 break
                 
     def process_detection(self, frame):
@@ -812,6 +838,32 @@ class MainVideoContainer:
             label.pack(fill=tk.X, padx=5, pady=2)
             self.info_labels[(from_area, to_area)] = label
     
+    def update_video_record_button_color(self):
+        """Video kaydı butonunun rengini açık/kapalı durumuna göre ayarla."""
+        if not hasattr(self, 'video_record_button') or self.video_record_button is None:
+            return
+
+        if self.should_save_on_stop:
+            # Açık: yeşil
+            bg_color = '#2ecc71'
+        else:
+            # Kapalı: kırmızı
+            bg_color = '#e74c3c'
+
+        self.video_record_button.configure(bg=bg_color, activebackground=bg_color)
+
+    def _on_video_record_button_enter(self, event):
+        """Hover sırasında buton rengini biraz koyulaştır."""
+        if self.should_save_on_stop:
+            hover_color = '#27ae60'
+        else:
+            hover_color = '#c0392b'
+        event.widget.configure(bg=hover_color, activebackground=hover_color)
+
+    def _on_video_record_button_leave(self, event):
+        """Hover bitince temel duruma dön."""
+        self.update_video_record_button_color()
+
     def toggle_detection(self):
         """Tespit modunu aç/kapa"""
         if not YOLO_AVAILABLE:
@@ -843,6 +895,18 @@ class MainVideoContainer:
             self.last_area_per_object = {}
             self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
             self.update_info_panel()
+
+    def toggle_video_recording(self):
+        """Video kaydını aç/kapa"""
+        # Oynatma sırasında ayar değiştirmeye izin verme
+        if self.is_playing:
+            self.show_notification("Önce videoyu durdurun, sonra kayıt ayarını değiştirin")
+            return
+        
+        self.should_save_on_stop = not self.should_save_on_stop
+        status = "açık" if self.should_save_on_stop else "kapalı"
+        self.show_notification(f"Video kaydı {status}")
+        self.update_video_record_button_color()
     
     def pause_video(self):
         """Video oynatmayı duraklat"""
@@ -859,9 +923,12 @@ class MainVideoContainer:
             self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self.display_first_frame()
         
-        # Kayıt yapılacaksa kaydet
-        if was_playing and self.should_save_on_stop:
-            self._save_recording()
+        # Kayıt / sayım yapılacaksa kaydet
+        if was_playing:
+            if self.should_save_on_stop:
+                self._save_recording()
+            else:
+                self._save_counts_only()
         
         self.show_notification('Video durduruldu')
         
@@ -870,9 +937,12 @@ class MainVideoContainer:
         was_playing = self.is_playing
         self.is_playing = False
         
-        # Kayıt yapılacaksa kaydet
-        if was_playing and self.should_save_on_stop:
-            self._save_recording()
+        # Kayıt / sayım yapılacaksa kaydet
+        if was_playing:
+            if self.should_save_on_stop:
+                self._save_recording()
+            else:
+                self._save_counts_only()
         
         if self.video_capture:
             self.video_capture.release()
@@ -921,6 +991,35 @@ class MainVideoContainer:
         except Exception as e:
             messagebox.showerror("Hata", f"Video kaydedilirken hata oluştu: {str(e)}")
             self.show_notification("Video kaydı başarısız")
+    
+    def _save_counts_only(self):
+        """Video oluşturmadan sadece geçiş sayımlarını kaydet"""
+        if not self.transition_counts:
+            return
+        
+        # Kullanıcıdan isim iste
+        root = self.parent_frame.winfo_toplevel()
+        name = simpledialog.askstring(
+            "Geçiş Sayımları",
+            "Geçiş sayımları için bir isim girin:",
+            parent=root
+        )
+        
+        if not name:
+            self.show_notification("Sayım kaydı iptal edildi")
+            return
+        
+        transition_counts = self.transition_counts.copy()
+        
+        try:
+            record_id = self.video_recorder.save_transition_counts_only(name, transition_counts)
+            if record_id:
+                self.show_notification(f"Sayım kaydedildi: {name}")
+            else:
+                self.show_notification("Kaydedilecek geçiş bulunamadı")
+        except Exception as e:
+            messagebox.showerror("Hata", f"Sayım kaydedilirken hata oluştu: {str(e)}")
+            self.show_notification("Sayım kaydı başarısız")
         
     def on_canvas_resize(self, event):
         """Canvas boyutu değiştiğinde"""
@@ -960,9 +1059,14 @@ class MainVideoContainer:
         """Temizlik işlemleri"""
         self.is_playing = False
         
-        # Kayıt yapılacaksa kaydet
-        if self.should_save_on_stop and self.video_recorder.recording:
-            self._save_recording()
+        # Uygulama kapanırken popup/isim sormadan sadece kaynakları temizle.
+        # Eğer kayıt açıksa, kaydı isim vermeden iptal et (geçici dosyayı siler).
+        try:
+            if self.video_recorder.recording:
+                self.video_recorder.stop_recording(name=None, transition_counts=None)
+        except Exception:
+            # Kapanışta hata yüzünden uygulamayı kilitlemeyelim.
+            pass
         
         if self.video_capture:
             self.video_capture.release()

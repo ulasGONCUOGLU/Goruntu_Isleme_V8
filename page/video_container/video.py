@@ -114,15 +114,25 @@ class VideoContainer:
         )
         
         if file_path:
-            self.stop_video()
-            self.video_capture = cv2.VideoCapture(file_path)
-            
-            if self.video_capture.isOpened():
+            self.load_video_from_path(file_path)
+
+    def load_video_from_path(self, file_path: str):
+        """Verilen dosya yolundan video yükle (Dosyalar paneli için)."""
+        if not file_path:
+            return
+
+        self.stop_video()
+        self.video_capture = cv2.VideoCapture(file_path)
+
+        if self.video_capture.isOpened():
+            # Placeholder'ı temizle
+            if hasattr(self, "placeholder_text"):
                 self.video_frame.delete(self.placeholder_text)
-                self.show_notification(f'Video yüklendi: {file_path.split("/")[-1]}')
-                self.display_first_frame()
-            else:
-                messagebox.showerror("Hata", "Video dosyası açılamadı!")
+            file_name = file_path.replace("\\", "/").split("/")[-1]
+            self.show_notification(f"Video yüklendi: {file_name}")
+            self.display_first_frame()
+        else:
+            messagebox.showerror("Hata", "Video dosyası açılamadı!")
                 
     def display_first_frame(self):
         """İlk kareyi göster"""

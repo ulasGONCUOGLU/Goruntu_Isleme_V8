@@ -2,6 +2,7 @@ import tkinter as tk
 from page.main_container.video import MainVideoContainer
 from page.video_container.video import VideoContainer
 from page.grafik.main import GrafikContainer
+from page.files_container import FilesContainer
 
 class VideoPlayerApp:
     def __init__(self, root):
@@ -202,9 +203,26 @@ class VideoPlayerApp:
             'container': grafik_container
         }
         grafik_frame.pack_forget()  # Başlangıçta gizli
-        
+
+        # Dosyalar paneli (kayıtlı videolar)
+        files_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+
+        def open_video_in_panel(video_path):
+            # Önce Video paneline geç, sonra seçilen videoyu yükle
+            self.select_panel('Video')
+            container = self.panel_containers.get('Video', {}).get('container')
+            if container and hasattr(container, 'load_video_from_path'):
+                container.load_video_from_path(video_path)
+
+        files_container = FilesContainer(files_frame, self.colors, open_video_in_panel)
+        self.panel_containers['Dosyalar'] = {
+            'frame': files_frame,
+            'container': files_container
+        }
+        files_frame.pack_forget()  # Başlangıçta gizli
+
         # Diğer paneller için placeholder container'lar
-        other_panels = ['Ayarlar', 'Dosyalar', 'Bildirim']
+        other_panels = ['Ayarlar', 'Bildirim']
         for panel_name in other_panels:
             panel_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
             placeholder = tk.Label(

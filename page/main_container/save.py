@@ -38,7 +38,7 @@ class VideoRecorder:
             )
         ''')
         
-        # Geçiş sayımları tablosu
+        # Geçiş sayımları tablosu (video ile ilişkili)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transition_counts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +49,9 @@ class VideoRecorder:
                 FOREIGN KEY (video_record_id) REFERENCES video_records(id)
             )
         ''')
+        
+        # Not: Sadece sayım kayıtları da mevcut şema üzerinden (video_records + transition_counts)
+        # tutulur. Bu yüzden ayrı bir tabloya ihtiyaç yoktur.
         
         conn.commit()
         conn.close()
@@ -215,3 +218,45 @@ class VideoRecorder:
             self.video_writer = None
         self.recording = False
 
+    def save_transition_counts_only(self, name, transition_counts):
+        """Video dosyası oluşturmadan sadece geçiş sayımlarını veritabanına kaydet.
+        Kayıtlar `video_records` + `transition_counts` tablolarına yazılır.
+        
+        Args:
+            name: Kayıt ismi
+            transition_counts: {(from_area, to_area): count} sözlüğü
+        
+        Returns:
+            int: Oluşturulan oturum ID'si veya None
+        """
+        if not transition_counts:
+            return None
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Video olmadan bir "kayıt başlığı" oluştur (video_path zorunlu olduğu için placeholder)
+            cursor.execute('''
+                INSERT INTO video_records (name, video_path, frame_count)
+                VALUES (?, ?, ?)
+            ''', (name, '', 0))
+            
+            record_id = cursor.lastrowid
+            
+            # Geçiş sayımlarını ekle
+            for (from_area, to_area), count in transition_counts.items():
+                if count > 0:
+                    cursor.execute('''
+                        INSERT INTO transition_counts (video_record_id, from_area, to_area, count)
+                        VALUES (?, ?, ?, ?)
+                    ''', (record_id, from_area, to_area, count))
+            
+            conn.commit()
+            return record_id
+        
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
