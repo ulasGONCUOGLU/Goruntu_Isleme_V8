@@ -3,6 +3,7 @@ from page.main_container.video import MainVideoContainer
 from page.video_container.video import VideoContainer
 from page.grafik.main import GrafikContainer
 from page.files_container import FilesContainer
+from page.settings.main import SettingsContainer  # YENİ
 
 class VideoPlayerApp:
     def __init__(self, root):
@@ -62,7 +63,7 @@ class VideoPlayerApp:
         title_label.pack(side=tk.LEFT, pady=15)
         
         # Menü butonları
-        menu_items = ['Dosya', 'Düzenle', 'Görünüm', 'Ayarlar']
+        menu_items = ['Dosya', 'Grafik', 'Ayarlar']
         for item in menu_items:
             btn = tk.Button(
                 menu_frame,
@@ -221,8 +222,18 @@ class VideoPlayerApp:
         }
         files_frame.pack_forget()  # Başlangıçta gizli
 
+        # --- YENİ: Ayarlar paneli ---
+        settings_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+        settings_container = SettingsContainer(settings_frame, self.colors)
+        self.panel_containers['Ayarlar'] = {
+            'frame': settings_frame,
+            'container': settings_container
+        }
+        settings_frame.pack_forget()  # Başlangıçta gizli
+        # ----------------------------
+
         # Diğer paneller için placeholder container'lar
-        other_panels = ['Ayarlar', 'Bildirim']
+        other_panels = ['Bildirim']  # 'Ayarlar' artık buradan çıktı
         for panel_name in other_panels:
             panel_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
             placeholder = tk.Label(
@@ -268,9 +279,8 @@ class VideoPlayerApp:
         # Menü isimlerini panel isimlerine map et
         menu_to_panel = {
             'Dosya': 'Dosyalar',
-            'Düzenle': 'Ayarlar',
-            'Görünüm': 'Grafik',
-            'Ayarlar': 'Ayarlar'
+            'Grafik': 'Grafik',
+            'Ayarlar': 'Ayarlar'  # Üst menü Ayarlar → Ayarlar paneli
         }
         
         panel_name = menu_to_panel.get(menu_name)

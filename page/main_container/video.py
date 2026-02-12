@@ -340,6 +340,43 @@ class MainVideoContainer:
         widget.bind('<Enter>', lambda e: widget.configure(bg=hover_color))
         widget.bind('<Leave>', lambda e: widget.configure(bg=normal_color))
         
+    def _load_model_from_settings(self) -> bool:
+        """
+        Ayarlar DB'sinden aktif modeli oku ve yükle.
+        Başarılıysa True, değilse False döner.
+        """
+        try:
+            from page.settings.main import SettingsContainer
+            model_name = SettingsContainer.get_active_model()
+        except Exception:
+            model_name = None
+
+        if not model_name:
+            messagebox.showerror(
+                "Model Bulunamadı",
+                "Ayarlar > Model Seçimi bölümünden bir .pt modeli seçip uygulayın."
+            )
+            return False
+
+        model_path = os.path.join("dosyalar", model_name)
+
+        if not os.path.exists(model_path):
+            messagebox.showerror(
+                "Dosya Bulunamadı",
+                f"Model dosyası bulunamadı:\n{model_path}\n\n"
+                "Dosyanın /dosyalar klasöründe olduğundan emin olun."
+            )
+            return False
+
+        try:
+            self.model = YOLO(model_path)
+            self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
+            self.show_notification(f"Model yüklendi: {model_name}")
+            return True
+        except Exception as e:
+            messagebox.showerror("Hata", f"Model yüklenirken hata:\n{str(e)}")
+            return False
+        
     def load_video(self):
         """Video dosyası yükle"""
         file_path = filedialog.askopenfilename(
@@ -361,18 +398,9 @@ class MainVideoContainer:
                 self.show_notification(f'Video yüklendi: {os.path.basename(file_path)}')
                 self.display_first_frame()
 
+                # Sadece YOLO mevcutsa ve model henüz yüklü değilse DB'den yükle
                 if YOLO_AVAILABLE and self.model is None:
-                    model_path = 'runs/train/cctv_car_bike_detection/weights/best.pt'
-                    if os.path.exists(model_path):
-                        try:
-                            self.model = YOLO(model_path)
-                            self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
-                            self.show_notification("Model yüklendi")
-                        except Exception as e:
-                            messagebox.showerror("Hata", f"Model yüklenirken hata: {str(e)}")
-                    else:
-                        messagebox.showerror("Hata", f"Model dosyası bulunamadı: {model_path}")
-
+                    self._load_model_from_settings()
             else:
                 messagebox.showerror("Hata", "Video dosyası açılamadı!")
                 
@@ -842,59 +870,16 @@ class MainVideoContainer:
         """Video kaydı butonunun rengini açık/kapalı durumuna göre ayarla."""
         if not hasattr(self, 'video_record_button') or self.video_record_button is None:
             return
-
-        if self.should_save_on_stop:
-            # Açık: yeşil
-            bg_color = '#2ecc71'
-        else:
-            # Kapalı: kırmızı
-            bg_color = '#e74c3c'
-
+        bg_color = '#2ecc71' if self.should_save_on_stop else '#e74c3c'
         self.video_record_button.configure(bg=bg_color, activebackground=bg_color)
 
     def _on_video_record_button_enter(self, event):
-        """Hover sırasında buton rengini biraz koyulaştır."""
-        if self.should_save_on_stop:
-            hover_color = '#27ae60'
-        else:
-            hover_color = '#c0392b'
+        hover_color = '#27ae60' if self.should_save_on_stop else '#c0392b'
         event.widget.configure(bg=hover_color, activebackground=hover_color)
 
     def _on_video_record_button_leave(self, event):
         """Hover bitince temel duruma dön."""
         self.update_video_record_button_color()
-
-    def toggle_detection(self):
-        """Tespit modunu aç/kapa"""
-        if not YOLO_AVAILABLE:
-            messagebox.showerror("Hata", "YOLO kütüphanesi bulunamadı!")
-            return
-        
-        if not self.model:
-            # Model yükle
-            model_path = 'runs/train/cctv_car_bike_detection/weights/best.pt'
-            if not os.path.exists(model_path):
-                messagebox.showerror("Hata", f"Model dosyası bulunamadı: {model_path}")
-                return
-            
-            try:
-                self.model = YOLO(model_path)
-                self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
-                self.show_notification("Model yüklendi")
-            except Exception as e:
-                messagebox.showerror("Hata", f"Model yüklenirken hata: {str(e)}")
-                return
-        
-        self.enable_detection = not self.enable_detection
-        status = "açık" if self.enable_detection else "kapalı"
-        self.show_notification(f"Tespit modu {status}")
-        
-        if not self.enable_detection:
-            # Sayaçları sıfırla
-            self.transition_counts = {}
-            self.last_area_per_object = {}
-            self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
-            self.update_info_panel()
 
     def toggle_video_recording(self):
         """Video kaydını aç/kapa"""

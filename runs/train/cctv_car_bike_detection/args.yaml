@@ -103,4 +103,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: C:\Users\ugoncuoglu\Desktop\python-goruntu-isleme\V6\runs\train\cctv_car_bike_detection
+save_dir: C:\Users\ugoncuoglu\Desktop\python-goruntu-isleme\Goruntu_Isleme_V8\runs\train\cctv_car_bike_detection
