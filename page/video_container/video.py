@@ -166,35 +166,81 @@ class VideoContainer:
                 
     def update_video_frame(self, frame):
         """Video karesini canvas'a çiz"""
+        # Frame kontrolü
+        if frame is None:
+            return
+            
         # Frame'i RGB'ye çevir
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Canvas boyutlarını al
+        # Canvas boyutlarını al - henüz oluşturulmamışsa varsayılan değer kullan
         canvas_width = self.video_frame.winfo_width()
         canvas_height = self.video_frame.winfo_height()
         
-        # Frame boyutlarını hesapla (aspect ratio koru)
+        # Canvas boyutları geçersizse (0 veya 1) varsayılan değer ata
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
+        
+        # Frame boyutlarını kontrol et
         frame_height, frame_width = frame_rgb.shape[:2]
+        
+        # Frame boyutları geçersizse işlemi durdur
+        if frame_width <= 0 or frame_height <= 0:
+            return
+        
+        # Aspect ratio hesapla - sıfıra bölme hatasına karşı koruma
+        if frame_height == 0:
+            return
+            
         aspect_ratio = frame_width / frame_height
         
-        if canvas_width / canvas_height > aspect_ratio:
-            new_height = canvas_height
-            new_width = int(canvas_height * aspect_ratio)
+        # Yeni boyutları hesapla - canvas_height sıfır olabilir
+        if canvas_height <= 0 or canvas_width <= 0:
+            new_width = frame_width
+            new_height = frame_height
         else:
-            new_width = canvas_width
-            new_height = int(canvas_width / aspect_ratio)
+            try:
+                if canvas_width / canvas_height > aspect_ratio:
+                    new_height = canvas_height
+                    new_width = int(canvas_height * aspect_ratio)
+                else:
+                    new_width = canvas_width
+                    new_height = int(canvas_width / aspect_ratio)
+            except ZeroDivisionError:
+                new_width = frame_width
+                new_height = frame_height
         
-        # Resize et
-        frame_resized = cv2.resize(frame_rgb, (new_width, new_height))
+        # Boyutların geçerliliğini kontrol et - sıfır veya negatif olmasın
+        if new_width <= 0:
+            new_width = 1
+        if new_height <= 0:
+            new_height = 1
+        
+        # Resize et - try-except ile koru
+        try:
+            frame_resized = cv2.resize(frame_rgb, (new_width, new_height))
+        except cv2.error as e:
+            print(f"Resize hatası: {e}, new_width: {new_width}, new_height: {new_height}")
+            # Hata durumunda orijinal boyutu dene
+            try:
+                frame_resized = cv2.resize(frame_rgb, (frame_width, frame_height))
+            except:
+                return
         
         # PIL Image ve ImageTk'ye çevir
-        img = Image.fromarray(frame_resized)
-        photo = ImageTk.PhotoImage(image=img)
+        try:
+            img = Image.fromarray(frame_resized)
+            photo = ImageTk.PhotoImage(image=img)
+        except Exception as e:
+            print(f"Görüntü dönüştürme hatası: {e}")
+            return
         
         # Canvas'ı temizle ve yeni resmi ekle
         self.video_frame.delete("all")
-        x = (canvas_width - new_width) // 2
-        y = (canvas_height - new_height) // 2
+        x = max(0, (canvas_width - new_width) // 2)
+        y = max(0, (canvas_height - new_height) // 2)
         self.video_frame.create_image(x, y, anchor=tk.NW, image=photo)
         
         # Referansı sakla (garbage collection'dan koru)

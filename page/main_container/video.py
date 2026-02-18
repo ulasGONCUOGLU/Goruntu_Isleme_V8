@@ -284,12 +284,12 @@ class MainVideoContainer:
         btn_container = tk.Frame(control_frame, bg=self.colors['bg_medium'])
         btn_container.pack(pady=15, padx=15)
         
-        # Kontrol butonları
+        # Kontrol butonları - İstenen sırayla: Dosya Seç, Oynat, Duraklat, Durdur, Bitir, Sıfırla, Video Kaydı Aç/Kapa
         buttons = [
             ('📂 Dosya Seç', self.load_video),
             ('▶️ Oynat', self.play_video),
             ('⏸️ Duraklat', self.pause_video),
-            ('⏹️ Durdur', self.stop_video),
+            ('🛑 Bitir', self.finish_video),  # Yeni Bitir butonu
             ('🔄 Sıfırla', self.reset_video),
             ('🎥 Video Kaydı Aç/Kapa', self.toggle_video_recording),
         ]
@@ -319,6 +319,10 @@ class MainVideoContainer:
 
                 btn.bind('<Enter>', self._on_video_record_button_enter)
                 btn.bind('<Leave>', self._on_video_record_button_leave)
+            elif command == self.finish_video:
+                # Bitir butonu için özel renk
+                btn.configure(bg='#e74c3c')  # Kırmızı
+                self.add_hover_effect(btn, '#e74c3c', '#c0392b')
             else:
                 self.add_hover_effect(btn, self.colors['accent'], self.colors['accent_hover'])
         
@@ -388,7 +392,6 @@ class MainVideoContainer:
         )
         
         if file_path:
-            self.stop_video()
             self.video_capture = cv2.VideoCapture(file_path)
             
             if self.video_capture.isOpened():
@@ -434,7 +437,7 @@ class MainVideoContainer:
             
     def video_loop(self):
         """Video oynatma döngüsü"""
-        while self.is_playing and self.video_capture.isOpened():
+        while self.is_playing and self.video_capture and self.video_capture.isOpened():
             ret, frame = self.video_capture.read()
             if ret:
                 self.original_frame = frame.copy()
@@ -457,15 +460,43 @@ class MainVideoContainer:
             else:
                 # Video bitti
                 self.is_playing = False
-                self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 
-                # Video bittiğinde kayıt/sayım kaydı yap (ana thread'de)
-                root = self.parent_frame.winfo_toplevel()
-                if self.should_save_on_stop:
-                    root.after(0, self._save_recording)
-                else:
-                    root.after(0, self._save_counts_only)
+                # Video pozisyonunu başa sar
+                if self.video_capture:
+                    self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    self.parent_frame.after(0, self.display_first_frame)
                 break
+    
+    def finish_video(self):
+        """
+        Videoyu yarıda kes ve kaydet.
+        Oynatma anında bu butona basıldığında videoyu durdurur,
+        o anki sayım ve kayıt bilgilerini DB'ye kaydeder.
+        """
+        if not self.is_playing:
+            self.show_notification("Video oynatılmıyor, bitirilemez")
+            return
+        
+        # Oynatmayı durdur
+        self.is_playing = False
+        
+        # Kullanıcıya bilgi ver
+        self.show_notification("Video bitiriliyor, kayıt yapılıyor...")
+        
+        # Kayıt ve sayım işlemlerini yap
+        if self.should_save_on_stop:
+            # Video kaydı varsa kaydet
+            self._save_recording()
+        else:
+            # Sadece sayım varsa kaydet
+            self._save_counts_only()
+        
+        # Geçiş sayımlarını sıfırla (isteğe bağlı - bir sonraki analiz için)
+        # self.transition_counts = {}
+        # self.last_area_per_object = {}
+        # self.update_info_panel()
+        
+        self.show_notification("Video bitirildi ve kaydedildi")
                 
     def process_detection(self, frame):
         """YOLO ile tespit yap ve sayım yap"""
@@ -899,35 +930,10 @@ class MainVideoContainer:
             self.is_playing = False
             self.show_notification('Video duraklatıldı')
             
-    def stop_video(self):
-        """Video oynatmayı durdur"""
-        was_playing = self.is_playing
-        self.is_playing = False
-        
-        if self.video_capture:
-            self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.display_first_frame()
-        
-        # Kayıt / sayım yapılacaksa kaydet
-        if was_playing:
-            if self.should_save_on_stop:
-                self._save_recording()
-            else:
-                self._save_counts_only()
-        
-        self.show_notification('Video durduruldu')
-        
     def reset_video(self):
         """Video'yu sıfırla"""
         was_playing = self.is_playing
         self.is_playing = False
-        
-        # Kayıt / sayım yapılacaksa kaydet
-        if was_playing:
-            if self.should_save_on_stop:
-                self._save_recording()
-            else:
-                self._save_counts_only()
         
         if self.video_capture:
             self.video_capture.release()
@@ -937,6 +943,11 @@ class MainVideoContainer:
         self.current_frame = None
         self.frame_width = 0
         self.frame_height = 0
+        
+        # Geçiş sayımlarını sıfırla
+        self.transition_counts = {}
+        self.last_area_per_object = {}
+        self.update_info_panel()
         
         self.video_frame.delete("all")
         self.placeholder_text = self.video_frame.create_text(
