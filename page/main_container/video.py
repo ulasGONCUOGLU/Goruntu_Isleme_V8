@@ -18,97 +18,6 @@ except ImportError:
     print("YOLO kütüphanesi bulunamadı. Tespit özellikleri devre dışı.")
 
 
-class CentroidTracker:
-    """Nesne takibi için Centroid Tracker"""
-    def __init__(self, max_disappeared=30, max_distance=80):
-        self.next_object_id = 1
-        self.objects = {}
-        self.max_disappeared = max_disappeared
-        self.max_distance = max_distance
-
-    def _compute_distance(self, c1, c2):
-        dx = c1[0] - c2[0]
-        dy = c1[1] - c2[1]
-        return (dx * dx + dy * dy) ** 0.5
-
-    def update(self, detections):
-        """Detections listesini güncelle ve ID'leri döndür"""
-        if len(detections) == 0:
-            to_delete = []
-            for object_id, data in self.objects.items():
-                data['disappeared'] += 1
-                if data['disappeared'] > self.max_disappeared:
-                    to_delete.append(object_id)
-            for oid in to_delete:
-                del self.objects[oid]
-            return {}
-
-        if len(self.objects) == 0:
-            for det in detections:
-                self._register(det)
-        else:
-            unmatched_detections = set(range(len(detections)))
-            matches = []
-            for object_id, data in self.objects.items():
-                best_idx = None
-                best_dist = None
-                for i in list(unmatched_detections):
-                    if detections[i]['class'] != data['class']:
-                        continue
-                    dist = self._compute_distance(detections[i]['centroid'], data['centroid'])
-                    if best_dist is None or dist < best_dist:
-                        best_dist = dist
-                        best_idx = i
-                if best_idx is not None and best_dist is not None and best_dist <= self.max_distance:
-                    matches.append((object_id, best_idx))
-                    unmatched_detections.discard(best_idx)
-                else:
-                    data['disappeared'] += 1
-
-            to_delete = []
-            for object_id, data in self.objects.items():
-                if data['disappeared'] > self.max_disappeared:
-                    to_delete.append(object_id)
-            for oid in to_delete:
-                del self.objects[oid]
-
-            for object_id, det_idx in matches:
-                det = detections[det_idx]
-                data = self.objects.get(object_id)
-                if data is None:
-                    continue
-                data['centroid'] = det['centroid']
-                data['box'] = det['box']
-                data['history'].append(det['centroid'])
-                if len(data['history']) > 20:
-                    data['history'] = data['history'][-20:]
-                data['disappeared'] = 0
-
-            for det_idx in unmatched_detections:
-                self._register(detections[det_idx])
-
-        mapping = {}
-        for object_id, data in self.objects.items():
-            mapping[object_id] = {
-                'id': object_id,
-                'centroid': data['centroid'],
-                'class': data['class'],
-                'box': data.get('box'),
-                'history': data['history'],
-            }
-        return mapping
-
-    def _register(self, det):
-        self.objects[self.next_object_id] = {
-            'centroid': det['centroid'],
-            'class': det['class'],
-            'box': det['box'],
-            'disappeared': 0,
-            'history': [det['centroid']],
-        }
-        self.next_object_id += 1
-
-
 def point_in_polygon(point, polygon):
     """Ray casting algoritması ile nokta polygon içinde mi kontrol et"""
     x, y = point
@@ -150,8 +59,8 @@ class MainVideoContainer:
         
         # YOLO model
         self.model = None
-        self.tracker = None
-        # self.enable_detection = False
+        # Her nesnenin geçmiş konumlarını saklamak için (ID -> deque)
+        self.track_histories = {}
         
         # Alan yönetimi
         self.area_list = []  # [{'name': str, 'points': [(x1,y1), ...], 'id': int}]
@@ -374,7 +283,7 @@ class MainVideoContainer:
 
         try:
             self.model = YOLO(model_path)
-            self.tracker = CentroidTracker(max_disappeared=30, max_distance=80)
+            self.track_histories = {}
             self.show_notification(f"Model yüklendi: {model_name}")
             return True
         except Exception as e:
@@ -492,97 +401,97 @@ class MainVideoContainer:
             self._save_counts_only()
         
         # Geçiş sayımlarını sıfırla (isteğe bağlı - bir sonraki analiz için)
-        # self.transition_counts = {}
-        # self.last_area_per_object = {}
-        # self.update_info_panel()
+        self.transition_counts = {}
+        self.last_area_per_object = {}
+        self.update_info_panel()
         
         self.show_notification("Video bitirildi ve kaydedildi")
                 
     def process_detection(self, frame):
-        """YOLO ile tespit yap ve sayım yap"""
-        if not self.model or not self.tracker:
+        """YOLO11 model.track ile tespit ve takip yap, sayım yap"""
+        if not self.model:
             return frame
-        
-        # Model ile tespit
+
+        # YOLO11 track — ID'ler modelin kendi tracker'ından gelir
         results = self.model.track(
             frame,
             conf=0.3,
             tracker="bytetrack.yaml",
             persist=True
         )
-        
-        # Detections to tracker format
-        detections = []
+
         for result in results:
             boxes = result.boxes
             if boxes is None:
                 continue
+
             for box in boxes:
+                # Track ID yoksa atla
+                if box.id is None:
+                    continue
+
+                object_id = int(box.id[0].cpu().numpy())
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
                 confidence = float(box.conf[0].cpu().numpy())
                 class_id = int(box.cls[0].cpu().numpy())
                 class_name = self.model.names[class_id]
+
                 if class_name not in self.allowed_classes:
                     continue
                 if confidence < 0.5:
                     continue
+
                 cx = int((x1 + x2) / 2)
                 cy = int((y1 + y2) / 2)
-                detections.append({
-                    'centroid': (cx, cy),
-                    'class': class_name,
-                    'box': (x1, y1, x2, y2),
-                    'confidence': confidence
-                })
-        
-        tracks = self.tracker.update(detections)
-        
-        # Her nesne için alan tespiti ve geçiş kontrolü
-        for object_id, data in tracks.items():
-            class_name = data['class']
-            x1, y1, x2, y2 = data['box'] if data.get('box') else (0, 0, 0, 0)
-            cx, cy = data['centroid']
-            history = data.get('history', [])
-            
-            color = self.colors_detection.get(class_name, (255, 255, 255))
-            
-            # Kutu ve ID çiz
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            id_label = f"{class_name} ID:{object_id}"
-            label_size = cv2.getTextSize(id_label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
-            cv2.rectangle(frame, (x1, y1 - label_size[1] - 10),
-                          (x1 + label_size[0], y1), color, -1)
-            cv2.putText(frame, id_label, (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            
-            # Merkez ve iz çizgisi
-            cv2.circle(frame, (cx, cy), 3, color, -1)
-            if len(history) >= 2:
-                for i in range(1, len(history)):
-                    cv2.line(frame, history[i - 1], history[i], color, 1)
-            
-            # Hangi alanda?
-            current_area = None
-            for area in self.area_list:
-                if point_in_polygon((cx, cy), area['points']):
-                    current_area = area['name']
-                    break
-            
-            prev_area = self.last_area_per_object.get(object_id)
-            if prev_area is not None and current_area is not None and prev_area != current_area:
-                # Geçiş oldu
-                key = (prev_area, current_area)
-                if key not in self.transition_counts:
-                    self.transition_counts[key] = 0
-                self.transition_counts[key] += 1
-                self.update_info_panel()
-            
-            if current_area is not None:
-                self.last_area_per_object[object_id] = current_area
-        
+
+                # Geçmiş konumları güncelle
+                if object_id not in self.track_histories:
+                    self.track_histories[object_id] = []
+                history = self.track_histories[object_id]
+                history.append((cx, cy))
+                if len(history) > 20:
+                    self.track_histories[object_id] = history[-20:]
+                history = self.track_histories[object_id]
+
+                color = self.colors_detection.get(class_name, (255, 255, 255))
+
+                # Kutu ve ID çiz
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                id_label = f"{class_name} ID:{object_id}"
+                label_size = cv2.getTextSize(id_label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                cv2.rectangle(frame, (x1, y1 - label_size[1] - 10),
+                              (x1 + label_size[0], y1), color, -1)
+                cv2.putText(frame, id_label, (x1, y1 - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+                # Merkez ve iz çizgisi
+                cv2.circle(frame, (cx, cy), 3, color, -1)
+                if len(history) >= 2:
+                    for i in range(1, len(history)):
+                        cv2.line(frame, history[i - 1], history[i], color, 1)
+
+                # Hangi alanda?
+                current_area = None
+                for area in self.area_list:
+                    if point_in_polygon((cx, cy), area['points']):
+                        current_area = area['name']
+                        break
+
+                prev_area = self.last_area_per_object.get(object_id)
+                if prev_area is not None and current_area is not None and prev_area != current_area:
+                    # Geçiş oldu
+                    key = (prev_area, current_area)
+                    if key not in self.transition_counts:
+                        self.transition_counts[key] = 0
+                    self.transition_counts[key] += 1
+                    self.update_info_panel()
+
+                if current_area is not None:
+                    self.last_area_per_object[object_id] = current_area
+
         # Alanları çiz
         frame = self.draw_areas_on_frame(frame)
-        
+
         return frame
     
     def draw_areas_on_frame(self, frame):
@@ -944,9 +853,10 @@ class MainVideoContainer:
         self.frame_width = 0
         self.frame_height = 0
         
-        # Geçiş sayımlarını sıfırla
+        # Geçiş sayımlarını ve takip geçmişini sıfırla
         self.transition_counts = {}
         self.last_area_per_object = {}
+        self.track_histories = {}
         self.update_info_panel()
         
         self.video_frame.delete("all")
@@ -1056,12 +966,10 @@ class MainVideoContainer:
         self.is_playing = False
         
         # Uygulama kapanırken popup/isim sormadan sadece kaynakları temizle.
-        # Eğer kayıt açıksa, kaydı isim vermeden iptal et (geçici dosyayı siler).
         try:
             if self.video_recorder.recording:
                 self.video_recorder.stop_recording(name=None, transition_counts=None)
         except Exception:
-            # Kapanışta hata yüzünden uygulamayı kilitlemeyelim.
             pass
         
         if self.video_capture:

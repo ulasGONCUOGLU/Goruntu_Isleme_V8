@@ -27,6 +27,7 @@ Bu proje, CCTV kamera görüntülerinden araç tespiti yaparak alanlar arası ge
 ## 🔧 Gereksinimler
 
 ### Python Versiyonu
+
 - Python 3.8 veya üzeri
 
 ### Gerekli Kütüphaneler
@@ -45,34 +46,28 @@ openpyxl>=3.0.0 (Excel export için opsiyonel)
 ## 📦 Kurulum
 
 1. **Projeyi klonlayın veya indirin**
-   ```bash
+  ```bash
    git clone <repository-url>
-   cd V8
-   ```
-
+   cd Goruntu_Isleme_V8
+  ```
 2. **Virtual environment oluşturun (önerilir)**
-   ```bash
+  ```bash
    python -m venv venv
-   ```
-
+  ```
 3. **Virtual environment'ı aktifleştirin**
-   - Windows:
-     ```bash
-     venv\Scripts\activate
-     ```
-   - Linux/Mac:
-     ```bash
-     source venv/bin/activate
-     ```
-
+  - Windows:
+  - Linux/Mac:
+    ```bash
+    source venv/bin/activate
+    ```
 4. **Gerekli paketleri yükleyin**
-   ```bash
+  ```bash
    pip install opencv-python Pillow numpy ultralytics torch matplotlib openpyxl
-   ```
-
+  ```
 5. **YOLOv11 model dosyasını hazırlayın**
-   - Model dosyası `runs/train/cctv_car_bike_detection/weights/best.pt` konumunda olmalıdır
-   - Eğer model dosyanız yoksa, önce YOLOv11 ile model eğitimi yapmanız gerekmektedir
+  - Model dosyası `dosyalar/model` konumunda olmalıdır
+  - Eğer model dosyanız yoksa, önce YOLOv11 ile model eğitimi yapmanız gerekmektedir
+  - Modeli Ayarlar model ekle ile uygulama içinde değiştirebilirsiniz
 
 ## 🚀 Kullanım
 
@@ -87,36 +82,30 @@ python main.py
 ### Temel Kullanım Adımları
 
 1. **Video Yükleme**
-   - Ana Sayfa panelinde "📂 Dosya Seç" butonuna tıklayın
-   - İşlemek istediğiniz video dosyasını seçin
-
+  - Ana Sayfa panelinde "📂 Dosya Seç" butonuna tıklayına
+  - İşlemek istediğiniz video dosyasını seçin
 2. **Alan Tanımlama**
-   - "➕ Ekle" butonuna tıklayarak çizim modunu başlatın
-   - Video üzerinde sol tıklayarak alan sınırlarını belirleyin (en az 3 nokta)
-   - "✓ Tamamla" butonuna tıklayıp alana bir isim verin
-   - İstediğiniz kadar alan ekleyebilirsiniz
-
+  - "➕ Ekle" butonuna tıklayarak çizim modunu başlatın
+  - Video üzerinde sol tıklayarak alan sınırlarını belirleyin (en az 3 nokta)
+  - "✓ Tamamla" butonuna tıklayıp alana bir isim verin
+  - İstediğiniz kadar alan ekleyebilirsiniz
 3. **Tespit ve Sayım**
-   - "🎯 Tespit Aç/Kapa" butonuna tıklayarak tespit modunu aktifleştirin
-   - Model otomatik olarak yüklenecektir (ilk kullanımda)
-   - "▶️ Oynat" butonuna tıklayarak videoyu başlatın
-   - Araçlar tespit edilir ve alanlar arası geçişler sayılır
-
+  - Model otomatik olarak yüklenecektir (Sonraki kullanımda)
+  - "▶️ Oynat" butonuna tıklayarak videoyu başlatın
+  - Araçlar tespit edilir ve alanlar arası geçişler sayılır
 4. **Sonuçları Görüntüleme**
-   - Sağ panelde geçiş sayımları gerçek zamanlı olarak görüntülenir
-   - Grafik panelinde ("📊 Grafik" ikonu) tüm kayıtların grafiklerini görebilirsiniz
-   - Tablodan bir kayıt seçerek detaylı grafiğini görüntüleyebilirsiniz
-
+  - Sağ panelde geçiş sayımları gerçek zamanlı olarak görüntülenir
+  - Grafik panelinde ("📊 Grafik" ikonu) tüm kayıtların grafiklerini görebilirsiniz
+  - Tablodan bir kayıt seçerek detaylı grafiğini görüntüleyebilirsiniz
 5. **Video Kaydetme**
-   - Video oynatılırken otomatik olarak kayıt başlar
-   - Video durdurulduğunda kayıt için bir isim istenir
-   - Kayıtlar `dosyalar/video/` klasörüne kaydedilir
-   - Geçiş sayımları veritabanına kaydedilir
-
+  - Video oynatılırken otomatik olarak kayıt başlar
+  - Video durdurulduğunda kayıt için bir isim istenir
+  - Kayıtlar `dosyalar/video/` klasörüne kaydedilir
+  - Geçiş sayımları veritabanına kaydedilir
 6. **Excel Dışa Aktarma**
-   - Grafik panelinde bir kayıt seçin
-   - "📤 Excel Dışarıya Aktar" butonuna tıklayın
-   - Dosya konumunu seçin ve kaydedin
+  - Grafik panelinde bir kayıt seçin
+  - "📤 Excel Dışarıya Aktar" butonuna tıklayın
+  - Dosya konumunu seçin ve kaydedin
 
 ## 📁 Proje Yapısı
 
@@ -179,6 +168,7 @@ Video Yükleme → Frame Okuma → YOLO Tespit → Nesne Takibi → Alan Kontrol
 ### 6. Veritabanı Yapısı
 
 **video_records tablosu:**
+
 - `id`: Benzersiz kayıt ID'si
 - `name`: Video kaydı ismi
 - `video_path`: Video dosya yolu
@@ -186,6 +176,7 @@ Video Yükleme → Frame Okuma → YOLO Tespit → Nesne Takibi → Alan Kontrol
 - `frame_count`: Toplam frame sayısı
 
 **transition_counts tablosu:**
+
 - `id`: Benzersiz ID
 - `video_record_id`: Video kaydı referansı
 - `from_area`: Başlangıç alanı
@@ -209,10 +200,6 @@ Video Yükleme → Frame Okuma → YOLO Tespit → Nesne Takibi → Alan Kontrol
 - **Frame Ölçeklendirme**: Video frame'leri ekrana sığacak şekilde ölçeklenir
 - **GPU Desteği**: CUDA kullanılabilirse GPU ile hızlandırma
 
-### Model Eğitimi
-
-Model eğitimi için YOLOv11 kullanılmıştır. Eğitim parametreleri `runs/train/cctv_car_bike_detection/args.yaml` dosyasında bulunabilir.
-
 ## 📝 Notlar
 
 - Model dosyası (`best.pt`) projeye dahil değildir, ayrıca sağlanmalıdır
@@ -228,7 +215,7 @@ Model eğitimi için YOLOv11 kullanılmıştır. Eğitim parametreleri `runs/tra
 
 ## 📄 Lisans
 
-Bu proje eğitim amaçlı geliştirilmiştir.
+Bu proje Kişisel eğitim amaçlı geliştirilmiştir.
 
 ## 👤 Geliştirici
 
