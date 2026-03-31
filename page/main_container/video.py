@@ -835,35 +835,70 @@ class MainVideoContainer:
             self.show_notification('Video duraklatıldı')
             
     def reset_video(self):
-        """Video'yu sıfırla"""
-        was_playing = self.is_playing
+        """
+        Video ve tüm state'i sıfırla.
+        Proje ilk açıldığındaki temiz duruma döner:
+        - Video kapatılır
+        - Tüm alanlar silinir
+        - Tüm sayımlar sıfırlanır
+        - Takip geçmişi temizlenir
+        - Canvas sıfırlanır
+        """
+        # Önce oynatmayı durdur
         self.is_playing = False
-        
+
+        # Devam eden video kaydı varsa sessizce kapat (kaydetmeden)
+        try:
+            if self.video_recorder.recording:
+                self.video_recorder.stop_recording(name=None, transition_counts=None)
+        except Exception:
+            pass
+
+        # Video yakalamayı serbest bırak
         if self.video_capture:
             self.video_capture.release()
             self.video_capture = None
-        
+
+        # Frame bilgilerini sıfırla
         self.original_frame = None
         self.current_frame = None
         self.frame_width = 0
         self.frame_height = 0
-        
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.image_x = 0
+        self.image_y = 0
+
+        # =============================================
+        # ALAN LİSTESİNİ TAMAMEN TEMİZLE (asıl düzeltme)
+        # =============================================
+        self.area_list = []
+        self.current_polygon = []
+        self.drawing_mode = False
+        self.editing_area_id = None
+        self.selected_area_id = None
+
         # Geçiş sayımlarını ve takip geçmişini sıfırla
         self.transition_counts = {}
         self.last_area_per_object = {}
         self.track_histories = {}
+
+        # Bilgi panelini güncelle (boş göster)
         self.update_info_panel()
-        
+
+        # Canvas'ı tamamen temizle ve placeholder'ı yeniden oluştur
         self.video_frame.delete("all")
+        w = self.video_frame.winfo_width() or 800
+        h = self.video_frame.winfo_height() or 600
         self.placeholder_text = self.video_frame.create_text(
-            self.video_frame.winfo_width()//2,
-            self.video_frame.winfo_height()//2,
+            w // 2, h // 2,
             text="🎥 Video Oynatıcı\n\nVideo yüklemek için aşağıdaki butonları kullanın",
             font=('Segoe UI', 18),
             fill=self.colors['text'],
             justify=tk.CENTER
         )
-        self.show_notification('Video sıfırlandı')
+
+        self.show_notification('Video sıfırlandı - Tüm alanlar ve sayımlar temizlendi')
     
     def _save_recording(self):
         """Video kaydını kaydet"""
