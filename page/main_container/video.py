@@ -367,13 +367,8 @@ class MainVideoContainer:
                 self.update_video_frame(frame)
                 time.sleep(0.033)  # ~30 FPS
             else:
-                # Video bitti
-                self.is_playing = False
-                
-                # Video pozisyonunu başa sar
-                if self.video_capture:
-                    self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    self.parent_frame.after(0, self.display_first_frame)
+                # Video bitti - otomatik olarak bitir komutunu çalıştır
+                self.parent_frame.after(0, self.finish_video)
                 break
     
     def finish_video(self):
