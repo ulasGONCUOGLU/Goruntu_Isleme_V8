@@ -3,7 +3,8 @@ from page.main_container.video import MainVideoContainer
 from page.video_container.video import VideoContainer
 from page.grafik.main import GrafikContainer
 from page.files_container import FilesContainer
-from page.settings.main import SettingsContainer  # YENİ
+from page.settings.main import SettingsContainer
+from page.ai_train.main import AITrainContainer
 
 class VideoPlayerApp:
     def __init__(self, root):
@@ -54,7 +55,7 @@ class VideoPlayerApp:
         # Logo ve başlık
         title_label = tk.Label(
             menu_frame, 
-            text="🐍 Python Proje", 
+            text="🐍 Python Görüntü İşleme Proje Aracı", 
             font=('Segoe UI', 16, 'bold'),
             bg=self.colors['accent'],
             fg='white',
@@ -98,6 +99,7 @@ class VideoPlayerApp:
             ('⚙️', 'Ayarlar'),
             ('📁', 'Dosyalar'),
             ('📊', 'Grafik'),
+            ('🧪', 'AI Eğitimi'),
             ('🔔', 'Bildirim')
         ]
         
@@ -231,6 +233,16 @@ class VideoPlayerApp:
         }
         settings_frame.pack_forget()  # Başlangıçta gizli
         # ----------------------------
+
+        # --- YENİ: AI Train / AI Eğitimi paneli ---
+        ai_train_frame = tk.Frame(self.right_panel, bg=self.colors['bg_dark'])
+        ai_train_container = AITrainContainer(ai_train_frame, self.colors)
+        self.panel_containers['AI Eğitimi'] = {
+            'frame': ai_train_frame,
+            'container': ai_train_container
+        }
+        ai_train_frame.pack_forget()  # Başlangıçta gizli
+        # -----------------------------------------
 
         # Diğer paneller için placeholder container'lar
         other_panels = ['Bildirim']  # 'Ayarlar' artık buradan çıktı
